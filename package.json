@@ -1,0 +1,25 @@
+{
+  "name": "stock-pipeline",
+  "version": "1.0.0",
+  "description": "주식 재무 지표 자동 수집 및 수리적 분석 파이프라인",
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "scheduler": "node scheduler.js",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "better-sqlite3": "^12.8.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.18.0",
+    "node-cron": "^3.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "transform": {}
+  }
+}
