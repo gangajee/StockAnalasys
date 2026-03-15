@@ -6,7 +6,7 @@
 //   app.js에서 app.use('/api/companies', router)로 마운트
 
 import { Router } from 'express';
-import { getAllCompanies, getRecentPrices, getIndicators } from '../db/queries.js';
+import { getAllCompanies, getCompany, getRecentPrices, getIndicators } from '../db/queries.js';
 
 const router = Router();
 
@@ -46,16 +46,19 @@ router.get('/:ticker', (req, res, next) => {
     const ticker = req.params.ticker.toUpperCase();
     const priceLimit = parseInt(req.query.prices ?? '10', 10);
 
+    const company      = getCompany(ticker);
     const recentPrices = getRecentPrices(ticker, priceLimit);
     const indicators   = getIndicators(ticker);
 
-    // 주가 데이터가 없으면 DB에 없는 종목으로 판단
     if (recentPrices.length === 0 && indicators.length === 0) {
       return res.status(404).json({ error: `${ticker} 데이터가 없습니다.` });
     }
 
     res.json({
       ticker,
+      name:     company?.name     ?? null,
+      sector:   company?.sector   ?? null,
+      industry: company?.industry ?? null,
       recentPrices,
       indicators,
     });

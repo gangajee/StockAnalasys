@@ -32,7 +32,17 @@ export function calcAndSaveAllIndicators() {
 
   let savedCount = 0;
 
-  for (const row of rows) {
+  for (let row of rows) {
+    // shares_outstanding이 null이면 이전 기간의 값으로 폴백
+    if (row.shares_outstanding == null) {
+      const prev = db.prepare(`
+        SELECT shares_outstanding FROM financials
+        WHERE ticker = ? AND period < ? AND shares_outstanding IS NOT NULL
+        ORDER BY period DESC LIMIT 1
+      `).get(row.ticker, row.period);
+      if (prev) row = { ...row, shares_outstanding: prev.shares_outstanding };
+    }
+
     // 최신 종가(close)를 현재 주가로 사용
     const priceRows = getRecentPrices(row.ticker, 1);
     const price = priceRows.length > 0 ? priceRows[0].close : null;

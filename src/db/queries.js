@@ -22,10 +22,25 @@ export function getAllCompanies() {
 export function insertCompany(company) {
   return db
     .prepare(
-      `
-    INSERT OR IGNORE INTO companies (ticker, name, sector, industry)
-    VALUES (@ticker, @name, @sector, @industry)
-  `,
+      `INSERT OR IGNORE INTO companies (ticker, name, sector, industry)
+       VALUES (@ticker, @name, @sector, @industry)`,
+    )
+    .run(company);
+}
+
+// name/sector/industry가 있을 때만 업데이트 (null로 덮어쓰지 않음)
+export function getCompany(ticker) {
+  return db.prepare('SELECT * FROM companies WHERE ticker = ?').get(ticker);
+}
+
+export function updateCompanyInfo(company) {
+  return db
+    .prepare(
+      `UPDATE companies
+       SET name     = COALESCE(@name, name),
+           sector   = COALESCE(@sector, sector),
+           industry = COALESCE(@industry, industry)
+       WHERE ticker = @ticker`,
     )
     .run(company);
 }

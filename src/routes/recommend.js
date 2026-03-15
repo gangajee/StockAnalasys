@@ -5,7 +5,7 @@
 // → DB의 calculated_indicators를 벡터화해서 유사도 상위 N개 반환
 
 import { Router } from 'express';
-import { getIndicators } from '../db/queries.js';
+import { getIndicators, getCompany } from '../db/queries.js';
 import { zScoreNormalize, findTopSimilar } from '../similarity/vectorUtils.js';
 
 const router = Router();
@@ -43,12 +43,12 @@ router.get('/:ticker', (req, res, next) => {
     }
 
     const vectorMap = zScoreNormalize(latestRows);
-    const similar   = findTopSimilar(ticker, vectorMap, topN);
+    const similar   = findTopSimilar(ticker, vectorMap, topN).map(s => ({
+      ...s,
+      name: getCompany(s.ticker)?.name ?? null,
+    }));
 
-    res.json({
-      ticker,
-      similar,
-    });
+    res.json({ ticker, similar });
   } catch (err) {
     next(err);
   }
