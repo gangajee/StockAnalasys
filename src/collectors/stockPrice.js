@@ -1,48 +1,58 @@
 // src/collectors/stockPrice.js
-// [Phase 2] 주가 데이터 수집 모듈
-// FMP API: GET /historical-price-eod/full?symbol=:ticker&apikey=...
+// yahoo-finance2 기반 주가 데이터 수집
 
-import axios from 'axios';
-import 'dotenv/config';
-import { insertCompany, insertStockPrice } from '../db/queries.js';
+import YahooFinance from 'yahoo-finance2';
+import { insertCompany, updateCompanyInfo, insertStockPrice } from '../db/queries.js';
+import { KOSPI_NAMES } from '../tickers.js';
 
-const BASE_URL = process.env.API_BASE_URL;
-const API_KEY  = process.env.API_KEY;
+const yf = new YahooFinance({ suppressNotices: ['ripHistorical', 'yahooSurvey'] });
 
-// [학습] async/await: 비동기 API 호출을 동기 코드처럼 읽히게 만듦
-// [학습] try-catch: 네트워크 오류나 API 에러를 명시적으로 처리
 export async function fetchAndSaveStockPrice(ticker) {
-  const url = `${BASE_URL}/historical-price-eod/full?symbol=${ticker}&apikey=${API_KEY}`;
+  // 5년치 주가 수집
+  const period1 = new Date();
+  period1.setFullYear(period1.getFullYear() - 5);
 
-  const response = await axios.get(url);
+  const historical = await yf.chart(ticker, {
+    period1: period1.toISOString().slice(0, 10),
+    interval: '1d',
+  });
 
-  // 새 FMP API 응답 구조: 배열 직접 반환 [ { symbol, date, open, high, low, close, volume }, ... ]
-  // (구 v3는 { symbol, historical: [...] } 래퍼가 있었음)
-  const historical = response.data;
-  if (!Array.isArray(historical) || historical.length === 0) {
+  const quotes = historical.quotes;
+  if (!quotes || quotes.length === 0) {
     console.warn(`[stockPrice] ${ticker}: 주가 데이터 없음`);
     return;
   }
 
-  // [학습] companies 테이블에 종목 먼저 등록 (OR IGNORE → 중복 시 건너뜀)
-  insertCompany({ ticker, name: null, sector: null, industry: null });
+  // companies 테이블에 종목 등록 후 name/sector/industry 업데이트
+  // assetProfile 모듈에서 sector/industry를 가져옴
+  const [quoteInfo, summary] = await Promise.all([
+    yf.quote(ticker),
+    yf.quoteSummary(ticker, { modules: ['assetProfile'] }).catch(() => null),
+  ]);
+  const companyInfo = {
+    ticker,
+    // 코스피 종목은 한국어 이름 우선, 없으면 야후 파이낸스 영문명 사용
+    name:     KOSPI_NAMES[ticker] ?? quoteInfo.longName ?? quoteInfo.shortName ?? null,
+    sector:   summary?.assetProfile?.sector   ?? null,
+    industry: summary?.assetProfile?.industry ?? null,
+  };
+  insertCompany(companyInfo);
+  updateCompanyInfo(companyInfo);
 
-  // [학습] for...of 로 순서 보장하며 순회 (forEach는 async와 조합 시 주의 필요)
   let savedCount = 0;
-  for (const row of historical) {
+  for (const row of quotes) {
+    if (!row.close) continue;
     const result = insertStockPrice({
       ticker,
-      date:   row.date,
-      open:   row.open,
-      high:   row.high,
-      low:    row.low,
+      date:   row.date.toISOString().slice(0, 10),
+      open:   row.open   ?? null,
+      high:   row.high   ?? null,
+      low:    row.low    ?? null,
       close:  row.close,
-      volume: row.volume,
+      volume: row.volume ?? null,
     });
-    // better-sqlite3의 .run()은 { changes } 객체 반환
-    // changes === 1 이면 실제로 삽입됨, 0이면 OR IGNORE로 건너뜀
     if (result.changes > 0) savedCount++;
   }
 
-  console.log(`[stockPrice] ${ticker}: ${savedCount}건 저장 (전체 ${historical.length}건)`);
+  console.log(`[stockPrice] ${ticker}: ${savedCount}건 저장 (전체 ${quotes.length}건)`);
 }
